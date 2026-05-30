@@ -67,6 +67,26 @@ OUTPUT — RETURN ONLY VALID JSON (no markdown, no comments). Order clips by pre
 }}
 """
 
+def _torch_device():
+    """Pick the device for YOLO with a *real* CUDA usability probe.
+
+    torch.cuda.is_available() returns True even for GPUs whose compute
+    capability this torch build lacks kernels for (e.g. GTX 1080 / sm_61 under
+    cu128), so we actually run a tiny op and fall back to CPU if it fails.
+    """
+    try:
+        if not torch.cuda.is_available():
+            return "cpu"
+        torch.zeros(1, device="cuda").mul_(2.0)
+        torch.cuda.synchronize()
+        return "cuda"
+    except Exception as e:
+        print(f"[yolo] CUDA not usable, running on CPU: {e}")
+        return "cpu"
+
+
+YOLO_DEVICE = _torch_device()
+
 # Load the YOLO model once (Keep for backup or scene analysis if needed)
 model = YOLO('yolov8n.pt')
 
@@ -309,7 +329,7 @@ def detect_person_yolo(frame):
     Returns [x, y, w, h] of the person's 'upper body' approximation.
     """
     # Use the globally loaded model
-    results = model(frame, verbose=False, classes=[0]) # class 0 is person
+    results = model(frame, verbose=False, classes=[0], device=YOLO_DEVICE) # class 0 is person
     
     if not results:
         return None
@@ -751,12 +771,12 @@ def process_video_to_vertical(input_video, final_output_video):
     return True
 
 def transcribe_video(video_path):
-    print("🎙️  Transcribing video with Faster-Whisper (CPU Optimized)...")
-    from faster_whisper import WhisperModel
-    
-    # Run on CPU with INT8 quantization for speed
-    model = WhisperModel("base", device="cpu", compute_type="int8")
-    
+    print("🎙️  Transcribing video with Faster-Whisper...")
+    from asr import get_whisper_model
+
+    # GPU (large-v3) when available, automatic CPU fallback. See asr.py.
+    model = get_whisper_model()
+
     segments, info = model.transcribe(video_path, word_timestamps=True)
     
     print(f"   Detected language '{info.language}' with probability {info.language_probability:.2f}")
