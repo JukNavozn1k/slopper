@@ -334,42 +334,44 @@ def detect_person_yolo(frame):
                 
     return best_box
 
-def create_general_frame(frame, output_width, output_height):
+def create_general_frame(frame, output_width, output_height, darken=0.5):
     """
-    Creates a 'General Shot' frame: 
+    Creates a 'General Shot' frame:
     - Background: Blurred zoom of original
     - Foreground: Original video scaled to fit width, centered vertically.
     """
     orig_h, orig_w = frame.shape[:2]
-    
+
     # 1. Background (Fill Height)
-    # Crop center to aspect ratio
     bg_scale = output_height / orig_h
     bg_w = int(orig_w * bg_scale)
-    bg_resized = cv2.resize(frame, (bg_w, output_height))
-    
+    bg_interp = cv2.INTER_AREA if bg_scale < 1 else cv2.INTER_LINEAR
+    bg_resized = cv2.resize(frame, (bg_w, output_height), interpolation=bg_interp)
+
     # Crop center of background
     start_x = (bg_w - output_width) // 2
     if start_x < 0: start_x = 0
     background = bg_resized[:, start_x:start_x+output_width]
     if background.shape[1] != output_width:
         background = cv2.resize(background, (output_width, output_height))
-        
-    # Blur background
+
+    # Blur and darken background
     background = cv2.GaussianBlur(background, (51, 51), 0)
-    
+    if darken < 1.0:
+        background = (background * darken).astype(np.uint8)
+
     # 2. Foreground (Fit Width)
-    scale = output_width / orig_w
-    fg_h = int(orig_h * scale)
-    foreground = cv2.resize(frame, (output_width, fg_h), interpolation=cv2.INTER_AREA)
-    
+    fg_scale = output_width / orig_w
+    fg_h = int(orig_h * fg_scale)
+    fg_interp = cv2.INTER_AREA if fg_scale < 1 else cv2.INTER_LANCZOS4
+    foreground = cv2.resize(frame, (output_width, fg_h), interpolation=fg_interp)
+
     # 3. Overlay
     y_offset = (output_height - fg_h) // 2
-    
-    # Clone background to avoid modifying it
+
     final_frame = background.copy()
     final_frame[y_offset:y_offset+fg_h, :] = foreground
-    
+
     return final_frame
 
 def analyze_scenes_strategy(video_path, scenes):
@@ -609,10 +611,11 @@ def process_video_to_vertical(input_video, final_output_video):
     print("\n   🧠 Step 2: Preparing Active Tracking...")
     original_width, original_height = get_video_resolution(input_video)
     
-    OUTPUT_HEIGHT = original_height
-    OUTPUT_WIDTH = int(OUTPUT_HEIGHT * ASPECT_RATIO)
-    if OUTPUT_WIDTH % 2 != 0:
-        OUTPUT_WIDTH += 1
+    # Standard vertical video resolution for social media (1080x1920)
+    OUTPUT_WIDTH = 1080
+    OUTPUT_HEIGHT = int(OUTPUT_WIDTH / ASPECT_RATIO)  # 1920
+    if OUTPUT_HEIGHT % 2 != 0:
+        OUTPUT_HEIGHT += 1
 
     # Initialize Cameraman
     cameraman = SmoothedCameraman(OUTPUT_WIDTH, OUTPUT_HEIGHT, original_width, original_height)
@@ -693,9 +696,9 @@ def process_video_to_vertical(input_video, final_output_video):
                 # Crop
                 if y2 > y1 and x2 > x1:
                     cropped = frame[y1:y2, x1:x2]
-                    output_frame = cv2.resize(cropped, (OUTPUT_WIDTH, OUTPUT_HEIGHT))
+                    output_frame = cv2.resize(cropped, (OUTPUT_WIDTH, OUTPUT_HEIGHT), interpolation=cv2.INTER_LANCZOS4)
                 else:
-                    output_frame = cv2.resize(frame, (OUTPUT_WIDTH, OUTPUT_HEIGHT))
+                    output_frame = cv2.resize(frame, (OUTPUT_WIDTH, OUTPUT_HEIGHT), interpolation=cv2.INTER_LANCZOS4)
 
             ffmpeg_process.stdin.write(output_frame.tobytes())
             frame_number += 1
