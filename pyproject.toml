@@ -1,0 +1,39 @@
+[project]
+name = "slopper"
+version = "0.1.0"
+description = "AI-powered vertical video generator (OpenShorts)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "scenedetect==0.7",
+    "ultralytics==8.4.46",
+    "torch==2.11.0",
+    "torchvision==0.26.0",
+    "tqdm==4.67.3",
+    "yt-dlp",
+    "faster-whisper==1.2.1",
+    "google-genai==1.75.0",
+    "python-dotenv==1.2.2",
+    "mediapipe==0.10.14",
+    "boto3==1.43.4",
+    "fastapi==0.136.1",
+    "uvicorn==0.46.0",
+    "python-multipart==0.0.27",
+    "httpx==0.28.1",
+    "Pillow==12.2.0",
+    "beautifulsoup4==4.14.3",
+]
+
+# --- CUDA (GPU) configuration -------------------------------------------------
+# torch/torchvision are pulled from the CUDA 12.8 (cu128) wheel index so the same
+# build runs on both Pascal (GTX 1080, sm_61) and Blackwell (RTX 5060, sm_120).
+# cu128 also ships the nvidia-cudnn-cu12 / nvidia-cublas-cu12 libs that
+# faster-whisper's CTranslate2 backend needs for GPU inference.
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
